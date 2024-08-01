@@ -1,0 +1,17 @@
+#!/bin/bash
+
+P="$(realpath "$1")"
+DST="$(basename "$P").rr.tar"
+TMP="$(basename "$P").rr.tmp"
+REC="	This Archive Contains Recovery Info: Search rr.tar on github.com"
+rm "$TMP" &> /dev/null
+dd if=/dev/zero of="/tmp/$REC" bs=1M count=16 &> /dev/null
+if [ ! -d "$P" ]; then
+  P="$(dirname "$P")"
+fi
+tar --{owner,group}=1000 --numeric-owner --verbatim-files-from -cvf "$TMP"\
+  -C "$P" -T <(ls -A "$1")\
+  -C /tmp "$REC" || rm "/tmp/$REC" ; exit 1
+
+rm "/tmp/$REC"
+rrtar "$TMP" && chmod -w "$TMP" && mv -f "$TMP" "$DST" || exit 1
