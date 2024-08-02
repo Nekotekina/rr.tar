@@ -1,10 +1,10 @@
 #include <cstdio>
 #include <cstring>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <algorithm>
 #include <filesystem>
-#include <span>
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -43,17 +43,24 @@ int main(int argc, char* argv[]) {
 		perror("Failed to mmap archive");
 		return 1;
 	} else {
-		auto data = std::span<std::byte>(reinterpret_cast<std::byte*>(raw_ptr), sz - c_rcvsize);
-		auto rcv = std::span<std::byte>(reinterpret_cast<std::byte*>(raw_ptr) + sz - c_rcvsize, c_rcvsize);
+		auto data = std::string_view(reinterpret_cast<char*>(raw_ptr), sz - c_rcvsize);
+		auto rcv = std::string_view(reinterpret_cast<char*>(raw_ptr), sz);
+		auto off = rcv.rfind("\tFor Recovery: See rr.tar on GitHub|") + 512;
+		if (off < 512) {
+			std::fprintf(stderr, "Recovery data file not found, invalid archive");
+			return 1;
+		}
+		rcv.remove_prefix(off);
+		data.remove_suffix(data.size() - off);
 		for (std::size_t i = 0; i < rcv.size(); i++) {
-			if (rcv[i] != std::byte(0)) {
+			if (rcv[i]) {
 				std::fprintf(stderr, "Recovery data is not empty, invalid archive");
 				return 1;
 			}
 		}
 		for (std::size_t i = 0; i < data.size(); i++) {
 			// Any linear damage of the size up to c_rcvsize should be mathematically recoverable
-			rcv[(i - sz) % c_rcvsize] ^= data[i];
+			const_cast<char&>(rcv[(i - off) % c_rcvsize]) ^= data[i];
 		}
 	}
 
